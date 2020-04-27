@@ -23,6 +23,7 @@ import org.apache.flink.metrics.Gauge;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.operators.Output;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
@@ -57,10 +58,11 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 
 	@SuppressWarnings("unchecked")
 	public RecordWriterOutput(
-			StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> recordWriter,
-			TypeSerializer<OUT> outSerializer,
-			OutputTag outputTag,
-			StreamStatusProvider streamStatusProvider) {
+		StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> recordWriter,
+		TypeSerializer<OUT> outSerializer,
+		OutputTag outputTag,
+		StreamStatusProvider streamStatusProvider,
+		MetricsManager metricsManager) {
 
 		checkNotNull(recordWriter);
 		this.outputTag = outputTag;
@@ -77,6 +79,7 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 		}
 
 		this.streamStatusProvider = checkNotNull(streamStatusProvider);
+		this.recordWriter.setMetricsManager(metricsManager);
 	}
 
 	@Override

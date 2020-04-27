@@ -28,11 +28,14 @@ import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSeria
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.util.XORShiftRandom;
 
 import java.io.IOException;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.runtime.io.network.api.serialization.RecordSerializer.SerializationResult;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -70,6 +73,8 @@ public class RecordWriter<T extends IOReadableWritable> {
 	private final boolean flushAlways;
 
 	private Counter numBytesOut = new SimpleCounter();
+
+	private MetricsManager metricsManager;
 
 	public RecordWriter(ResultPartitionWriter writer) {
 		this(writer, new RoundRobinChannelSelector<T>());
@@ -125,8 +130,15 @@ public class RecordWriter<T extends IOReadableWritable> {
 
 	private void sendToTarget(T record, int targetChannel) throws IOException, InterruptedException {
 		RecordSerializer<T> serializer = serializers[targetChannel];
+		metricsManager.incRecordsOut();
+
+		long start = System.nanoTime();
 
 		SerializationResult result = serializer.addRecord(record);
+
+		long end = System.nanoTime();
+		// add serialization duration to the MetricsManager
+		metricsManager.addSerialization(end - start);
 
 		while (result.isFullBuffer()) {
 			if (tryFinishCurrentBufferBuilder(targetChannel, serializer)) {
@@ -145,8 +157,21 @@ public class RecordWriter<T extends IOReadableWritable> {
 		}
 		checkState(!serializer.hasSerializedData(), "All data should be written at once");
 
+		// inform the MetricsManager that the buffer is full
+		metricsManager.outputBufferFull(System.nanoTime());
+
 		if (flushAlways) {
+			start = System.nanoTime();
+
 			targetPartition.flush(targetChannel);
+
+			end = System.nanoTime();
+			// add serialization duration to the MetricsManager
+			metricsManager.addSerialization(end - start);
+
+			// inform the MetricsManager that the buffer is consumed
+			metricsManager.outputBufferFull(System.nanoTime());
+
 		}
 	}
 
@@ -162,13 +187,36 @@ public class RecordWriter<T extends IOReadableWritable> {
 			}
 
 			if (flushAlways) {
+				long start = System.nanoTime();
+
 				flushAll();
+
+				long end = System.nanoTime();
+				// add serialization duration to the MetricsManager
+				metricsManager.addSerialization(end - start);
+
+				// inform the MetricsManager that the buffer is consumed
+				metricsManager.outputBufferFull(System.nanoTime());
+
 			}
 		}
 	}
 
 	public void flushAll() {
+
+		long start = System.nanoTime();
+
 		targetPartition.flushAll();
+
+		long end = System.nanoTime();
+
+		if (metricsManager != null) {
+			// add serialization duration to the MetricsManager
+			metricsManager.addSerialization(end - start);
+
+			// inform the MetricsManager that the buffer is consumed
+			metricsManager.outputBufferFull(System.nanoTime());
+		}
 	}
 
 	public void clearBuffers() {
@@ -181,7 +229,7 @@ public class RecordWriter<T extends IOReadableWritable> {
 
 	/**
 	 * Sets the metric group for this RecordWriter.
-     */
+	 */
 	public void setMetricGroup(TaskIOMetricGroup metrics) {
 		numBytesOut = metrics.getNumBytesOutCounter();
 	}
@@ -206,7 +254,17 @@ public class RecordWriter<T extends IOReadableWritable> {
 
 	private BufferBuilder requestNewBufferBuilder(int targetChannel) throws IOException, InterruptedException {
 		checkState(!bufferBuilders[targetChannel].isPresent());
+		long bufferStart = System.nanoTime();
+
 		BufferBuilder bufferBuilder = targetPartition.getBufferProvider().requestBufferBuilderBlocking();
+
+		long bufferEnd = System.nanoTime();
+
+		if (bufferEnd - bufferStart > 0) {
+			// add waiting duration to the MetricsManager
+			metricsManager.addWaitingForWriteBufferDuration(bufferEnd - bufferStart);
+		}
+
 		bufferBuilders[targetChannel] = Optional.of(bufferBuilder);
 		targetPartition.addBufferConsumer(bufferBuilder.createBufferConsumer(), targetChannel);
 		return bufferBuilder;
@@ -217,5 +275,9 @@ public class RecordWriter<T extends IOReadableWritable> {
 			bufferBuilders[targetChannel].get().finish();
 			bufferBuilders[targetChannel] = Optional.empty();
 		}
+	}
+
+	public void setMetricsManager(MetricsManager metricsManager) {
+		this.metricsManager = metricsManager;
 	}
 }

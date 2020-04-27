@@ -36,6 +36,7 @@ import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -107,6 +108,12 @@ public class StreamInputProcessor<IN> {
 	private final WatermarkGauge watermarkGauge;
 	private Counter numRecordsIn;
 
+	private MetricsManager metricsManager;
+	private long deserializationDuration = 0;
+	private long processingDuration = 0;
+	private long recordsProcessed = 0;
+
+
 	private boolean isFinished;
 
 	@SuppressWarnings("unchecked")
@@ -169,7 +176,12 @@ public class StreamInputProcessor<IN> {
 
 		while (true) {
 			if (currentRecordDeserializer != null) {
+				long start = System.nanoTime();
+
 				DeserializationResult result = currentRecordDeserializer.getNextRecord(deserializationDelegate);
+
+				deserializationDuration += System.nanoTime() - start;
+
 
 				if (result.isBufferConsumed()) {
 					currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
@@ -180,8 +192,14 @@ public class StreamInputProcessor<IN> {
 					StreamElement recordOrMark = deserializationDelegate.getInstance();
 
 					if (recordOrMark.isWatermark()) {
+						long processingStart = System.nanoTime();
+
 						// handle watermark
 						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
+
+						processingDuration += System.nanoTime() - processingStart;
+						recordsProcessed++;
+
 						continue;
 					} else if (recordOrMark.isStreamStatus()) {
 						// handle stream status
@@ -199,12 +217,31 @@ public class StreamInputProcessor<IN> {
 						synchronized (lock) {
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
+
+							long processingStart = System.nanoTime();
+
 							streamOperator.processElement(record);
+
+
+							processingDuration += System.nanoTime() - processingStart;
+							recordsProcessed++;
+
 						}
 						return true;
 					}
 				}
 			}
+
+			// the buffer got empty
+			if (deserializationDuration > 0) {
+				// inform the MetricsManager that the buffer is consumed
+				metricsManager.inputBufferConsumed(System.nanoTime(), deserializationDuration, processingDuration, recordsProcessed);
+
+				deserializationDuration = 0;
+				processingDuration = 0;
+				recordsProcessed = 0;
+			}
+
 
 			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
 			if (bufferOrEvent != null) {
@@ -212,6 +249,11 @@ public class StreamInputProcessor<IN> {
 					currentChannel = bufferOrEvent.getChannelIndex();
 					currentRecordDeserializer = recordDeserializers[currentChannel];
 					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+
+					// inform the MetricsManager that we got a new input buffer
+					metricsManager.newInputBuffer(System.nanoTime());
+
+
 				}
 				else {
 					// Event received
@@ -277,6 +319,10 @@ public class StreamInputProcessor<IN> {
 				throw new RuntimeException("Exception occurred while processing valve output stream status: ", e);
 			}
 		}
+	}
+
+	public void setMetricsManager(MetricsManager metricsManager) {
+		this.metricsManager = metricsManager;
 	}
 
 }

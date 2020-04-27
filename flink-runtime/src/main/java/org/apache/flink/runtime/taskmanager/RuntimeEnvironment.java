@@ -39,6 +39,7 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -85,6 +86,8 @@ public class RuntimeEnvironment implements Environment {
 	private final TaskMetricGroup metrics;
 
 	private final Task containingTask;
+
+	private final MetricsManager metricsManager;
 
 	// ------------------------------------------------------------------------
 
@@ -136,6 +139,8 @@ public class RuntimeEnvironment implements Environment {
 		this.taskManagerInfo = checkNotNull(taskManagerInfo);
 		this.containingTask = containingTask;
 		this.metrics = metrics;
+		this.metricsManager = new MetricsManager(taskInfo.getTaskNameWithSubtasks(), executionConfig.getGlobalJobParameters().toMap());
+
 	}
 
 	// ------------------------------------------------------------------------
@@ -243,6 +248,11 @@ public class RuntimeEnvironment implements Environment {
 	@Override
 	public InputGate getInputGate(int index) {
 		return inputGates[index];
+	}
+
+	@Override
+	public MetricsManager getMetricsManager() {
+		return metricsManager;
 	}
 
 	@Override

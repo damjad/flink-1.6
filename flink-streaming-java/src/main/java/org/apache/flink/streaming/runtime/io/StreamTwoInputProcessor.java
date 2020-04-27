@@ -36,6 +36,7 @@ import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -123,6 +124,12 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 
 	private Counter numRecordsIn;
 
+	private MetricsManager metricsManager;
+
+	private long deserializationDuration = 0;
+	private long processingDuration = 0;
+	private long recordsProcessed = 0;
+
 	private boolean isFinished;
 
 	@SuppressWarnings("unchecked")
@@ -202,11 +209,15 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 		while (true) {
 			if (currentRecordDeserializer != null) {
 				DeserializationResult result;
+				long start = System.nanoTime();
+
 				if (currentChannel < numInputChannels1) {
 					result = currentRecordDeserializer.getNextRecord(deserializationDelegate1);
 				} else {
 					result = currentRecordDeserializer.getNextRecord(deserializationDelegate2);
 				}
+
+				deserializationDuration += System.nanoTime() - start;
 
 				if (result.isBufferConsumed()) {
 					currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
@@ -262,13 +273,31 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 							synchronized (lock) {
 								numRecordsIn.inc();
 								streamOperator.setKeyContextElement2(record);
+
+								long processingStart = System.nanoTime();
+
 								streamOperator.processElement2(record);
+
+								processingDuration += System.nanoTime() - processingStart;
+								recordsProcessed++;
+
 							}
 							return true;
 						}
 					}
 				}
 			}
+
+			// the buffer got empty
+			if (deserializationDuration > 0) {
+				// inform the MetricsManager that the buffer is consumed
+				metricsManager.inputBufferConsumed(System.nanoTime(), deserializationDuration, processingDuration, recordsProcessed);
+
+				deserializationDuration = 0;
+				processingDuration = 0;
+				recordsProcessed = 0;
+			}
+
 
 			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
 			if (bufferOrEvent != null) {
@@ -277,6 +306,11 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 					currentChannel = bufferOrEvent.getChannelIndex();
 					currentRecordDeserializer = recordDeserializers[currentChannel];
 					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+
+					// inform the MetricsManager that we got a new input buffer
+					metricsManager.newInputBuffer(System.nanoTime());
+
+
 
 				} else {
 					// Event received
@@ -397,4 +431,9 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 			}
 		}
 	}
+
+	public void setMetricsManager(MetricsManager metricsManager) {
+		this.metricsManager = metricsManager;
+	}
+
 }

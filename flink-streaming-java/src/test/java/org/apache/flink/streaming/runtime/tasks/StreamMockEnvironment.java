@@ -49,6 +49,7 @@ import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
+import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.util.Preconditions;
 
 import java.util.Collection;
@@ -329,4 +330,11 @@ public class StreamMockEnvironment implements Environment {
 	public TaskMetricGroup getMetricGroup() {
 		return UnregisteredMetricGroups.createUnregisteredTaskMetricGroup();
 	}
+
+	@Override
+	public MetricsManager getMetricsManager() {
+		return null;
+	}
+
+
 }
