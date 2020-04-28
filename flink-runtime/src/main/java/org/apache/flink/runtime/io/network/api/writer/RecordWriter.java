@@ -34,8 +34,6 @@ import org.apache.flink.util.XORShiftRandom;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.runtime.io.network.api.serialization.RecordSerializer.SerializationResult;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -187,16 +185,7 @@ public class RecordWriter<T extends IOReadableWritable> {
 			}
 
 			if (flushAlways) {
-				long start = System.nanoTime();
-
 				flushAll();
-
-				long end = System.nanoTime();
-				// add serialization duration to the MetricsManager
-				metricsManager.addSerialization(end - start);
-
-				// inform the MetricsManager that the buffer is consumed
-				metricsManager.outputBufferFull(System.nanoTime());
 
 			}
 		}

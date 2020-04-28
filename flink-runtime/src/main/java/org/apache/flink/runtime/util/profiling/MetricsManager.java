@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.util.profiling;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
@@ -121,11 +120,8 @@ public class MetricsManager implements Serializable {
 				List<String> rates = Arrays.asList(ratesLine);
 
 				Path ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + instanceId + "-" + epoch + ".log").toAbsolutePath();
-				File f = ratesFile.toFile();
 				try {
-					if(!f.exists()){
-						f.createNewFile();
-					}Files.write(ratesFile, rates, Charset.forName("UTF-8"));
+					Files.write(ratesFile, rates, Charset.forName("UTF-8"));
 				} catch (IOException e) {
 					System.err.println("Error while writing rates file for epoch " + epoch
 						+ " on task " + taskId + ".");
@@ -210,11 +206,8 @@ public class MetricsManager implements Serializable {
 					List<String> rates = Arrays.asList(ratesLine);
 
 					Path ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + instanceId + "-" + epoch + ".log").toAbsolutePath();
-					File f = ratesFile.toFile();
 					try {
-						if(!f.exists()){
-							f.createNewFile();
-						}Files.write(ratesFile, rates, Charset.forName("UTF-8"));
+						Files.write(ratesFile, rates, Charset.forName("UTF-8"));
 					} catch (IOException e) {
 						System.err.println("Error while writing rates file for epoch " + epoch
 							+ " on task " + taskId + ".");
