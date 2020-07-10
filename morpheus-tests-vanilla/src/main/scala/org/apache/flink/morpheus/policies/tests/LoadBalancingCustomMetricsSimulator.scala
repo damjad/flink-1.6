@@ -1,7 +1,8 @@
 package org.apache.flink.morpheus.policies.tests
 
-import org.apache.flink.morpheus.generators.CustomDistSentenceGenerator
 import org.apache.flink.morpheus.generators.utils.dists.{LinearWeightedUniformDistribution, RoundRobinDistribution, UniformDistribution}
+import org.apache.flink.morpheus.wordcount.generators.CustomDistSentenceGenerator
+import org.apache.flink.morpheus.wordcount.generators.utils.dists.{LinearWeightedUniformDistribution, RoundRobinDistribution, UniformDistribution}
 import org.apache.flink.runtime.morpheus.LoadBalancingPolicyCustomMetrics
 
 import scala.collection.mutable

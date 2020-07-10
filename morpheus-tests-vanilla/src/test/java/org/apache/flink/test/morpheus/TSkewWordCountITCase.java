@@ -2,27 +2,24 @@ package org.apache.flink.test.morpheus;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.utils.ParameterTool;
-import org.apache.flink.morpheus.utils.PropertiesHandler;
+import org.apache.flink.morpheus.wordcount.utils.PropertiesHandler;
 import org.apache.flink.runtime.instance.ActorGateway;
 import org.apache.flink.runtime.jobgraph.JobGraph;
-import org.apache.flink.runtime.messages.JobManagerMessages;
 import org.apache.flink.runtime.testingUtils.TestingJobManagerMessages;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 import org.junit.Test;
 
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.BiConsumer;
 
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Deadline;
 import scala.concurrent.duration.FiniteDuration;
 
-import static org.apache.flink.morpheus.SkewWordCount.cleanup;
-import static org.apache.flink.morpheus.SkewWordCount.createWordCountJobGraph;
+import static org.apache.flink.morpheus.wordcount.SkewWordCount.cleanup;
+import static org.apache.flink.morpheus.wordcount.SkewWordCount.createWordCountJobGraph;
 import static org.junit.Assert.fail;
 
 public class TSkewWordCountITCase extends TBaseTest {
@@ -56,9 +53,7 @@ public class TSkewWordCountITCase extends TBaseTest {
 
 			JobGraph jobGraph = createWordCountJobGraph(env,
 				props,
-				1,
-				1,
-				props.getInteger("parallelism", 1),
+				props.getInteger("source-parallelism", 1),
 				props.getInteger("parallelism", 1));
 
 			jobID = jobGraph.getJobID();
