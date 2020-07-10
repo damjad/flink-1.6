@@ -107,6 +107,7 @@ public class SkewWordCount {
 				.addSource(kafkaWords)
 				.setParallelism(p[0])
 				.uid("sentence-source")
+				.returns(TypeInformation.of(new TypeHint<CustomString[]>() {}))
 				.flatMap(new WordCountUtils.CustomStringTokenizer2())
 				.name("Splitter FlatMap")
 				.uid("flatmap")
