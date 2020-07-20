@@ -139,7 +139,9 @@ public class RuntimeEnvironment implements Environment {
 		this.taskManagerInfo = checkNotNull(taskManagerInfo);
 		this.containingTask = containingTask;
 		this.metrics = metrics;
-		this.metricsManager = new MetricsManager(taskInfo.getTaskNameWithSubtasks(), executionConfig.getGlobalJobParameters().toMap());
+		this.metricsManager = new MetricsManager(taskInfo.getTaskNameWithSubtasks(),
+			executionConfig.getGlobalJobParameters().toMap(),
+			taskInfo.getMaxNumberOfParallelSubtasks());
 
 	}
 

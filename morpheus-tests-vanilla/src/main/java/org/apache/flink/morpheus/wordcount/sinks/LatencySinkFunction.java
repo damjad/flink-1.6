@@ -23,8 +23,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 
 	private static final long LATENCY_THRESHOLD = 10L * 60L * 1000L;
 
-	private transient SummaryStatistics sinkLatency;
-	private transient SummaryStatistics sinkLatencyFlightTime;
+	private transient SummaryStatistics sinkEventLatency;
+	private transient SummaryStatistics sinkProcessingLatency;
 
 	private transient BufferedWriter writer;
 
@@ -53,6 +53,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 	private transient LongContainerGauge eventLatencyDur;
 	private transient SimpleCounter procLatencyCount;
 	private transient SimpleCounter eventLatencyCount;
+	private transient LongContainerGauge procLatency;
+	private transient LongContainerGauge eventLatency;
 
 
 	public LatencySinkFunction(String name, String filePath, int maxParallelism, int parallelism, int numVNodes) {
@@ -67,8 +69,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 	public void open(Configuration parameters) throws Exception {
 //		super.open(parameters);
 
-		this.sinkLatency = new SummaryStatistics();
-		this.sinkLatencyFlightTime = new SummaryStatistics();
+		this.sinkEventLatency = new SummaryStatistics();
+		this.sinkProcessingLatency = new SummaryStatistics();
 		this.stringBuffer = new StringBuilder(2048);
 		this.index = getRuntimeContext().getIndexOfThisSubtask();
 
@@ -107,6 +109,10 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		getRuntimeContext().getMetricGroup().gauge("eventLatencyDur", eventLatencyDur);
 		getRuntimeContext().getMetricGroup().counter("eventLatencyCount", eventLatencyCount);
 
+		procLatency = new LongContainerGauge();
+		eventLatency = new LongContainerGauge();
+		getRuntimeContext().getMetricGroup().gauge("procLatency", procLatency);
+		getRuntimeContext().getMetricGroup().gauge("eventLatency", eventLatency);
 	}
 
 	@Override
@@ -118,8 +124,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			writer.close();
 		}
 
-		sinkLatencyFlightTime.clear();
-		sinkLatency.clear();
+		sinkProcessingLatency.clear();
+		sinkEventLatency.clear();
 	}
 
 	private void updateCSV(long timestamp, int vnodeId) throws IOException {
@@ -131,14 +137,14 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			stringBuffer.append(timestamp);
 			stringBuffer.append(",");
 
-			stringBuffer.append(sinkLatency.getN());
+			stringBuffer.append(sinkEventLatency.getN());
 			stringBuffer.append(",");
-			stringBuffer.append(sinkLatencyFlightTime.getN());
+			stringBuffer.append(sinkProcessingLatency.getN());
 			stringBuffer.append(",");
 
-			stringBuffer.append(sinkLatency.getMean());
+			stringBuffer.append(sinkEventLatency.getMean());
 			stringBuffer.append(",");
-			stringBuffer.append(sinkLatencyFlightTime.getMean());
+			stringBuffer.append(sinkProcessingLatency.getMean());
 			stringBuffer.append(",");
 //				stringBuffer.append(sinkLatencyWindow.getMean());
 //				stringBuffer.append(",");
@@ -149,14 +155,14 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 //				stringBuffer.append(",");
 
 
-			stringBuffer.append(sinkLatency.getMin());
+			stringBuffer.append(sinkEventLatency.getMin());
 			stringBuffer.append(",");
-			stringBuffer.append(sinkLatencyFlightTime.getMin());
+			stringBuffer.append(sinkProcessingLatency.getMin());
 			stringBuffer.append(",");
 
-			stringBuffer.append(sinkLatency.getMax());
+			stringBuffer.append(sinkEventLatency.getMax());
 			stringBuffer.append(",");
-			stringBuffer.append(sinkLatencyFlightTime.getMax());
+			stringBuffer.append(sinkProcessingLatency.getMax());
 
 			stringBuffer.append("\n");
 
@@ -179,8 +185,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		long timeMillis = context.currentProcessingTime();
 		long latency = timeMillis - record.getEventTime();
 		if (latency <= LATENCY_THRESHOLD) {
-			sinkLatency.addValue(latency);
-			sinkLatencyFlightTime.addValue(timeMillis - record.getIngestionTime());
+			sinkEventLatency.addValue(latency);
+			sinkProcessingLatency.addValue(timeMillis - record.getIngestionTime());
 
 			// for every value submitted to MetricsManager, It is reset.
 //			assert 0 == eventLatencyDur.getValue();
@@ -193,6 +199,9 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			eventLatencyCount.dec(eventLatencyCount.getCount() - 1);
 			procLatencyCount.dec(procLatencyCount.getCount() - 1);
 
+
+			eventLatency.setValue(((long) sinkEventLatency.getMean()));
+			procLatency.setValue(((long) sinkProcessingLatency.getMean()));
 //				sinkLatencyWindow.addValue(timeMillis - record.windowTriggeringTimestamp);
 //			updateCSV(timeMillis, VNodeUtils.getVNode(record.getKey(), maxParallelism, numVNodes, parallelism));
 			updateCSV(timeMillis, 0);

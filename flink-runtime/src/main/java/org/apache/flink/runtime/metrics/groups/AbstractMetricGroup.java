@@ -450,6 +450,10 @@ public abstract class AbstractMetricGroup<A extends AbstractMetricGroup<?>> impl
 		}
 	}
 
+	public Metric getMetric(String name) {
+		return metrics.get(name);
+	}
+
 	/**
 	 * Enum for indicating which child group should be created.
 	 * `KEY` is used to create {@link GenericKeyMetricGroup}.

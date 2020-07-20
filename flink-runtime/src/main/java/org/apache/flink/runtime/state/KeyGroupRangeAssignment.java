@@ -67,7 +67,8 @@ public final class KeyGroupRangeAssignment {
 	 * @return the key-group to which the given key is assigned
 	 */
 	public static int computeKeyGroupForKeyHash(int keyHash, int maxParallelism) {
-		return MathUtils.murmurHash(keyHash) % maxParallelism;
+//		return MathUtils.murmurHash(keyHash) % maxParallelism;
+		return keyHash % maxParallelism;
 	}
 
 	/**

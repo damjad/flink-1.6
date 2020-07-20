@@ -1,22 +1,18 @@
 package org.apache.flink.test.morpheus;
 
-import org.apache.flink.client.program.MiniClusterClient;
 import org.apache.flink.client.program.StandaloneClusterClient;
-import org.apache.flink.client.program.StandaloneClusterClient;
-import org.apache.flink.client.program.MiniClusterClient;
-import org.apache.flink.client.program.StandaloneClusterClient;
-import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
-//import org.apache.flink.configuration.ReplicationOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.WebOptions;
 import org.apache.flink.runtime.io.network.netty.NettyConfig;
 import org.apache.flink.runtime.testingUtils.TestingCluster;
-//import org.apache.flink.runtime.util.NativeIO;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+
+//import org.apache.flink.configuration.ReplicationOptions;
+//import org.apache.flink.runtime.util.NativeIO;
 
 public class TBaseTest {
 
@@ -87,6 +83,9 @@ public class TBaseTest {
 //
 //		config.setString("rhino.actions.log", "/home/danish/FastWorkspace/BDMA/TUB/flink-1.6.0/flink-1.6/flink/morpheus-tests-vanilla/rhino-logs/rhino-actions.log");
 //		config.setString(JobManagerOptions.EXECUTION_FAILOVER_STRATEGY, FailoverStrategyLoader.PIPELINED_REGION_RESTART_STRATEGY_NAME);
+
+		config.setString("metrics.reporter.prom.class", "org.apache.flink.metrics.prometheus.PrometheusReporter");
+		config.setString("metrics.reporter.prom.port", "9250");
 
 		cluster = new TestingCluster(config);
 		cluster.start();

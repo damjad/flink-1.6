@@ -18,6 +18,10 @@
 
 package org.apache.flink.runtime.util.profiling;
 
+import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.LongContainerGauge;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
@@ -27,6 +31,9 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import static java.nio.file.StandardOpenOption.APPEND;
+import static java.nio.file.StandardOpenOption.CREATE;
 
 /**
  * The MetricsManager is responsible for logging activity profiling information (except for messages).
@@ -41,6 +48,10 @@ public class MetricsManager implements Serializable {
 	private final String workerName; // The task description string logged in the rates file
 	private final int instanceId; // The operator instance id
 	private final int numInstances; // The total number of instances for this operator
+	private final int maxParallelism;
+
+	private Tuple4<Long, Long, Long, Long> latency = new Tuple4<>(0L, 0L, 0L, 0L);
+
 
 	private long recordsIn = 0;	// Total number of records ingested since the last flush
 	private long recordsOut = 0;	// Total number of records produced since the last flush
@@ -56,11 +67,15 @@ public class MetricsManager implements Serializable {
 
 	private long epoch = 0;	// The current aggregation interval. The MetricsManager outputs one rates file per epoch.
 
+	private LongContainerGauge observedProcRate;
+	private LongContainerGauge trueProcRate;
+
+
 	/**
 	 * @param taskDescription the String describing the owner operator instance
 	 * @param jobConfiguration this job's configuration
 	 */
-	public MetricsManager(String taskDescription, Map<String, String> jobConfiguration) {
+	public MetricsManager(String taskDescription, Map<String, String> jobConfiguration, int maxParallelism) {
 		taskId = taskDescription;
 		String workerId = taskId.replace("Timestamps/Watermarks", "Timestamps-Watermarks");
 		workerName = workerId.substring(0, workerId.indexOf("(")-1);
@@ -70,6 +85,8 @@ public class MetricsManager implements Serializable {
 		windowSize = Long.parseLong(jobConfiguration.getOrDefault("policy.windowSize",  "10000000000"));
 		ratesPath = jobConfiguration.getOrDefault("policy.rates.path", "/tmp/rates/");
 		currentWindowStart = status.getProcessingStart();
+
+		this.maxParallelism = maxParallelism;
 	}
 
 	/**
@@ -108,6 +125,9 @@ public class MetricsManager implements Serializable {
 				double observedProcessingRate = (recordsIn / (duration / 1000.0)) * 1000000;
 				double observedOutputRate = (recordsOut / (duration / 1000.0)) * 1000000;
 
+				observedProcRate.setValue((long) observedProcessingRate);
+				trueProcRate.setValue((long) trueProcessingRate);
+
 				// log the rates: one file per epoch
 				String ratesLine = workerName + ","
 					+ instanceId  + ","
@@ -116,12 +136,16 @@ public class MetricsManager implements Serializable {
 					+ trueProcessingRate + ","
 					+ trueOutputRate + ","
 					+ observedProcessingRate + ","
-					+ observedOutputRate;
+					+ observedOutputRate + ","
+					+ recordsIn + ","
+					+ (latency.f2 == 0 ? "NaN" : div(latency.f0, latency.f2)) + ","
+					+ (latency.f3 == 0 ? "NaN" : div(latency.f1, latency.f3)) + ","
+					+ epoch;
 				List<String> rates = Arrays.asList(ratesLine);
 
 				Path ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + instanceId + "-" + epoch + ".log").toAbsolutePath();
 				try {
-					Files.write(ratesFile, rates, Charset.forName("UTF-8"));
+					Files.write(ratesFile, rates, Charset.forName("UTF-8"), APPEND, CREATE);
 				} catch (IOException e) {
 					System.err.println("Error while writing rates file for epoch " + epoch
 						+ " on task " + taskId + ".");
@@ -225,6 +249,30 @@ public class MetricsManager implements Serializable {
 		}
 	}
 
+	public void updateLatencyMetrics(Object currentKey, Tuple4<LongContainerGauge, LongContainerGauge, Counter, Counter> latencyMetricsFromSink) {
+		if (latencyMetricsFromSink != null) {
+
+					latency.f0 += latencyMetricsFromSink.f0.getValue();
+					latency.f2 += latencyMetricsFromSink.f2.getCount();
+					latency.f1 += latencyMetricsFromSink.f1.getValue();
+					latency.f3 += latencyMetricsFromSink.f3.getCount();
+
+					//Maybe set them in the latency sink.
+					latencyMetricsFromSink.f0.setValue(0);
+					latencyMetricsFromSink.f2.dec(latencyMetricsFromSink.f2.getCount());
+					latencyMetricsFromSink.f1.setValue(0);
+					latencyMetricsFromSink.f3.dec(latencyMetricsFromSink.f3.getCount());
+		}
+	}
+
+	private Long div(Long dividend, Long divisor) {
+		if (divisor == 0) {
+			return Long.MAX_VALUE;
+		}
+		else {
+			return dividend / divisor;
+		}
+	}
 	private void setOutBufferStart(long start) {
 		status.setOutBufferStart(start);
 	}
@@ -240,4 +288,11 @@ public class MetricsManager implements Serializable {
 	public int getInstanceId() {
 		return instanceId;
 	}
+
+	public void setProcRateMetricContainers(LongContainerGauge observedProcRate, LongContainerGauge trueProcRate) {
+		this.observedProcRate = observedProcRate;
+		this.trueProcRate = trueProcRate;
+	}
+
+
 }

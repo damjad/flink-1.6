@@ -146,7 +146,7 @@ public class WordCountUtils {
 		@Override
 		public void initializeState(FunctionInitializationContext context) throws Exception {
 			state = context.getKeyedStateStore().getMapState(new MapStateDescriptor<>("state", TypeInformation.of(CustomString .class), TypeInformation.of(WordCountWindowAccumulator.class)));
-			temp = new HashMap<>(8192);
+			temp = new HashMap<>((int) Math.pow(26, 5));
 		}
 
 

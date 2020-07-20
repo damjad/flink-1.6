@@ -18,7 +18,7 @@ import scala.concurrent.Future;
 import scala.concurrent.duration.Deadline;
 import scala.concurrent.duration.FiniteDuration;
 
-import static org.apache.flink.morpheus.wordcount.SkewWordCount.cleanup;
+import static org.apache.flink.morpheus.wordcount.SkewWordCount.backup;
 import static org.apache.flink.morpheus.wordcount.SkewWordCount.createWordCountJobGraph;
 import static org.junit.Assert.fail;
 
@@ -46,7 +46,7 @@ public class TSkewWordCountITCase extends TBaseTest {
 		// make parameters available in the web interface
 		PropertiesHandler props = PropertiesHandler.getInstance("/home/danish/FastWorkspace/BDMA/TUB/flink-1.6.0/flink-1.6/flink/morpheus-tests-vanilla/src/main/conf/load-balance-skew-word-count.properties");
 		env.getConfig().setGlobalJobParameters(ParameterTool.fromPropertiesFile(props.getFilePath()));
-		cleanup(props);
+		backup(props);
 
 		try {
 			jobManager = cluster.getLeaderGateway(deadline.timeLeft());

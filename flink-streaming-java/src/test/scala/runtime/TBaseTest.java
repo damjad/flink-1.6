@@ -76,6 +76,8 @@ public class TBaseTest {
 
 //		config.setString(JobManagerOptions.EXECUTION_FAILOVER_STRATEGY, FailoverStrategyLoader.PIPELINED_REGION_RESTART_STRATEGY_NAME);
 
+		config.setString("metrics.reporter.prom.class", "org.apache.flink.metrics.prometheus.PrometheusReporter");
+		config.setString("metrics.reporter.prom.port", "9250");
 		cluster = new TestingCluster(config);
 		cluster.start();
 

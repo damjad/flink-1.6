@@ -7,7 +7,6 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.morpheus.wordcount.generators.RandomSentenceGenerator;
-import org.apache.flink.morpheus.wordcount.generators.SentenceGeneratorFactory;
 import org.apache.flink.morpheus.wordcount.generators.utils.vo.CustomString;
 import org.apache.flink.morpheus.wordcount.generators.utils.vo.RecordWrapper;
 import org.apache.flink.morpheus.wordcount.kafka.CustomStringDeserializer;
@@ -21,19 +20,31 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
-import org.apache.flink.util.FileUtils;
+
+import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static org.apache.flink.morpheus.wordcount.generators.SentenceGeneratorFactory.createGeneratorsStrategy;
+
 public class SkewWordCount {
+
+	static SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy_HH:mm:ss");
+	static String date = formatter.format(new Date());
+
 
 	public static void main(String[] args) throws Exception {
 
 		// Checking input parameters
-		final ParameterTool params = ParameterTool.fromArgs(args);
+		ParameterTool params = ParameterTool.fromArgs(args);
 
 		// set up the execution environment
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -41,12 +52,12 @@ public class SkewWordCount {
 
 		PropertiesHandler props = PropertiesHandler.getInstance(params.get("properties-file", "src/main/skew-word-count.properties"));
 
-		params.mergeWith(ParameterTool.fromPropertiesFile(props.getFilePath()));
+		params = params.mergeWith(ParameterTool.fromPropertiesFile(props.getFilePath()));
 
 		// make parameters available in the web interface
 		env.getConfig().setGlobalJobParameters(params);
 
-		cleanup(props);
+		backup(props);
 
 		createWordCountJobGraph(env,
 			props,
@@ -57,10 +68,58 @@ public class SkewWordCount {
 
 	}
 
-	public static void cleanup(PropertiesHandler props) throws IOException {
-		// remove metrics manager metrics
-		FileUtils.cleanDirectory(new File(props.getProperty("policy.rates.path")));
+//	public static void cleanup(PropertiesHandler props) throws IOException {
+//		// remove metrics manager metrics
+//		FileUtils.cleanDirectory(new File(props.getProperty("policy.rates.path")));
+//		FileUtils.cleanDirectory(new File(props.getProperty("latencies-path")));
+//
+//	}
 
+	public static boolean backup(PropertiesHandler props) throws IOException {
+		// remove metrics manager metrics
+		boolean x = true;
+
+		String lastDate = "x";
+
+
+		File lastDateFile = new File(props.getProperty("last-date-path"));
+		if (lastDateFile.exists()) {
+			lastDate = Files.readAllLines(lastDateFile.toPath(), Charset.defaultCharset()).get(0);
+		}
+		else {
+			lastDateFile.getParentFile().mkdirs();
+		}
+		Files.write(lastDateFile.toPath(), date.getBytes(Charset.defaultCharset()), CREATE, TRUNCATE_EXISTING);
+
+		File latencies = new File(props.getProperty("latencies-path"));
+		File newLatencies = new File(latencies.getAbsolutePath() + "_latencies_" + lastDate);
+		if (latencies.exists()) {
+			FileUtils.copyDirectory(latencies, newLatencies);
+			FileUtils.cleanDirectory(latencies);
+		}
+		else {
+			x = x && latencies.mkdirs();
+		}
+
+
+		File rates = new File(props.getProperty("policy.rates.path"));
+		File newRates = new File(rates.getAbsolutePath() + "_rates_" + lastDate);
+		if (rates.exists()) {
+
+			FileUtils.copyDirectory(rates, newRates);
+			FileUtils.cleanDirectory(rates);
+		}
+		else {
+			x = x && rates.mkdirs();
+		}
+
+		File backupDir = new File(props.getProperty("backup-path"));
+		File backsupSubDir = new File(backupDir.getAbsolutePath() + "/" + latencies.getName() + "_" + lastDate);
+		if (newLatencies.exists()) FileUtils.moveDirectoryToDirectory(newLatencies, backsupSubDir, true);
+		if (newRates.exists()) FileUtils.moveDirectoryToDirectory(newRates, backsupSubDir, true);
+
+
+		return x;
 	}
 
 	public static JobGraph createWordCountJobGraph(StreamExecutionEnvironment env,
@@ -68,6 +127,10 @@ public class SkewWordCount {
 												   int... p) {
 
 		List<RandomSentenceGenerator> generators = createGeneratorsStrategy(props);
+		//Warmup.
+//		generators.forEach(x -> x.nextSentence(1));
+
+
 		int sentenceSize = props.getInteger("sentence-size", 100);
 		int defaultParallelism = props.getInteger("default-parallelism", 1);
 		int maxParallelism = props.getInteger("max-parallelism", 4096);
@@ -82,7 +145,7 @@ public class SkewWordCount {
 
 		final DataStream<RecordWrapper<Tuple2<CustomString, Long>>> text;
 
-		if(props.getBoolean("autogen", true)) {
+		if (props.getBoolean("autogen", true)) {
 			text = env.addSource(
 				new MultiDistRateControlledSourceFunction(
 					sentenceSize,
@@ -101,19 +164,26 @@ public class SkewWordCount {
 					new CustomStringDeserializer(), props.getModuleProperties());
 
 			kafkaWords.setCommitOffsetsOnCheckpoints(true);
-			kafkaWords.setStartFromEarliest();
+			if (props.getBoolean("start_earliest", false)) {
+				kafkaWords.setStartFromEarliest();
+			}
+			else {
+				kafkaWords.setStartFromLatest();
+			}
 
 			text = env
 				.addSource(kafkaWords)
 				.setParallelism(p[0])
 				.uid("sentence-source")
-				.returns(TypeInformation.of(new TypeHint<CustomString[]>() {}))
+				.returns(TypeInformation.of(new TypeHint<CustomString[]>() {
+				}))
 				.flatMap(new WordCountUtils.CustomStringTokenizer2())
 				.name("Splitter FlatMap")
 				.uid("flatmap")
 				.setParallelism(p[0])
 				.setMaxParallelism(maxParallelism)
-				.returns(TypeInformation.of(new TypeHint<RecordWrapper<Tuple2<CustomString, Long>>>() {}));
+				.returns(TypeInformation.of(new TypeHint<RecordWrapper<Tuple2<CustomString, Long>>>() {
+				}));
 
 		}
 
@@ -131,9 +201,8 @@ public class SkewWordCount {
 			.uid("count")
 			.setParallelism(p[1])
 			.setMaxParallelism(maxParallelism);
-//			.setVirtualNodesNum(numOfVirtualNodes);
 
-		counts.addSink(new LatencySinkFunction<>(System.currentTimeMillis()+"_latency-sink", latenciesOutputPath, maxParallelism, p[1], numOfVirtualNodes))
+		counts.addSink(new LatencySinkFunction<>("latency-sink", latenciesOutputPath, maxParallelism, p[1], numOfVirtualNodes))
 			.name("Latency Sink")
 			.uid("latency-sink")
 			.setParallelism(p[1]);
@@ -141,20 +210,7 @@ public class SkewWordCount {
 //		counts.writeAsCsv(latenciesOutputPath, FileSystem.WriteMode.OVERWRITE).setParallelism(p[2]);
 
 		return env.getStreamGraph().getJobGraph();
-	}
-
-	public static List<RandomSentenceGenerator> createGeneratorsStrategy(PropertiesHandler propertiesHandler) {
-		String prefix = "generators.";
-		int i = 1;
-		List<RandomSentenceGenerator> strategies = new ArrayList<>();
-
-		do {
-			strategies.add(SentenceGeneratorFactory.createInstance(prefix + i, propertiesHandler));
-			i++;
-		}
-		while (propertiesHandler.getProperty(prefix + i + ".duration") != null);
-
-		return strategies;
+//		return null;
 	}
 
 	private static void configureEnvironment(StreamExecutionEnvironment env, int defaultParallelism, int maxParallelism, int checkpointingInterval, boolean cancelState) {

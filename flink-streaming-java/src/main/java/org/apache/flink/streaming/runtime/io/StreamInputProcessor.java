@@ -20,8 +20,10 @@ package org.apache.flink.streaming.runtime.io;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.LongContainerGauge;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -39,6 +41,8 @@ import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
 import org.apache.flink.runtime.util.profiling.MetricsManager;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
+import org.apache.flink.streaming.api.operators.StreamOperator;
+import org.apache.flink.streaming.api.operators.StreamSink;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
 import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
@@ -47,6 +51,7 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamstatus.StatusWatermarkValve;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
+import org.apache.flink.streaming.runtime.tasks.OperatorChain;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 
 import org.slf4j.Logger;
@@ -92,6 +97,8 @@ public class StreamInputProcessor<IN> {
 
 	/** Number of input channels the valve needs to handle. */
 	private final int numInputChannels;
+	private final OperatorChain operatorChain;
+
 
 	/**
 	 * The channel from which a buffer came, tracked so that we can appropriately map
@@ -113,6 +120,10 @@ public class StreamInputProcessor<IN> {
 	private long processingDuration = 0;
 	private long recordsProcessed = 0;
 
+	private LongContainerGauge observedProcRate = new LongContainerGauge();
+	private LongContainerGauge trueProcRate = new LongContainerGauge();
+
+
 
 	private boolean isFinished;
 
@@ -128,7 +139,8 @@ public class StreamInputProcessor<IN> {
 			StreamStatusMaintainer streamStatusMaintainer,
 			OneInputStreamOperator<IN, ?> streamOperator,
 			TaskIOMetricGroup metrics,
-			WatermarkGauge watermarkGauge) throws IOException {
+			WatermarkGauge watermarkGauge,
+			OperatorChain operatorChain) throws IOException {
 
 		InputGate inputGate = InputGateUtil.createInputGate(inputGates);
 
@@ -159,6 +171,11 @@ public class StreamInputProcessor<IN> {
 
 		this.watermarkGauge = watermarkGauge;
 		metrics.gauge("checkpointAlignmentTime", barrierHandler::getAlignmentDurationNanos);
+		this.operatorChain = operatorChain;
+		metrics.gauge("observedProcRate", observedProcRate);
+		metrics.gauge("trueProcRate", trueProcRate);
+
+
 	}
 
 	public boolean processInput() throws Exception {
@@ -200,6 +217,7 @@ public class StreamInputProcessor<IN> {
 						processingDuration += System.nanoTime() - processingStart;
 						recordsProcessed++;
 
+
 						continue;
 					} else if (recordOrMark.isStreamStatus()) {
 						// handle stream status
@@ -225,6 +243,7 @@ public class StreamInputProcessor<IN> {
 
 							processingDuration += System.nanoTime() - processingStart;
 							recordsProcessed++;
+							metricsManager.updateLatencyMetrics(streamOperator.getCurrentKey(), getLatencyMetricsFromSink());
 
 						}
 						return true;
@@ -321,8 +340,27 @@ public class StreamInputProcessor<IN> {
 		}
 	}
 
+	public Tuple4<LongContainerGauge, LongContainerGauge, Counter, Counter> getLatencyMetricsFromSink() {
+
+		for (StreamOperator op : operatorChain.getAllOperators()) {
+			if (op instanceof StreamSink) {
+
+				LongContainerGauge procLatencyDur = (LongContainerGauge) ((OperatorMetricGroup) op.getMetricGroup()).getMetric("procLatencyDur");
+				LongContainerGauge eventLatencyDur =  (LongContainerGauge) ((OperatorMetricGroup) op.getMetricGroup()).getMetric("eventLatencyDur");
+				Counter procLatencyCount = (Counter) ((OperatorMetricGroup) op.getMetricGroup()).getMetric("procLatencyCount");
+				Counter eventLatencyCount = (Counter) ((OperatorMetricGroup) op.getMetricGroup()).getMetric("eventLatencyCount");
+
+				return new Tuple4<>(procLatencyDur, eventLatencyDur, procLatencyCount, eventLatencyCount);
+			}
+		}
+
+		return null;
+	}
+
 	public void setMetricsManager(MetricsManager metricsManager) {
 		this.metricsManager = metricsManager;
+		metricsManager.setProcRateMetricContainers(observedProcRate, trueProcRate);
 	}
+
 
 }
