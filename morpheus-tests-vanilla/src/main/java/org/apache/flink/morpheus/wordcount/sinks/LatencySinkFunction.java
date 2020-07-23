@@ -128,7 +128,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		sinkEventLatency.clear();
 	}
 
-	private void updateCSV(long timestamp, int vnodeId) throws IOException {
+	private void updateCSV(long timestamp, int vnodeId, long latency) throws IOException {
 		try {
 			stringBuffer.append(index);
 			stringBuffer.append(",");
@@ -163,6 +163,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			stringBuffer.append(sinkEventLatency.getMax());
 			stringBuffer.append(",");
 			stringBuffer.append(sinkProcessingLatency.getMax());
+			stringBuffer.append(",");
+			stringBuffer.append(latency);
 
 			stringBuffer.append("\n");
 
@@ -204,7 +206,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			procLatency.setValue(((long) sinkProcessingLatency.getMean()));
 //				sinkLatencyWindow.addValue(timeMillis - record.windowTriggeringTimestamp);
 //			updateCSV(timeMillis, VNodeUtils.getVNode(record.getKey(), maxParallelism, numVNodes, parallelism));
-			updateCSV(timeMillis, 0);
+			updateCSV(timeMillis, -1, latency);
 		}
 	}
 }
