@@ -75,6 +75,11 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		this.index = getRuntimeContext().getIndexOfThisSubtask();
 
 		File logDir = new File(filePath);
+		if (!logDir.exists()) {
+			if (!logDir.mkdirs()) {
+				throw new FileSystemException("Could not create directory: " + logDir.getAbsolutePath());
+			}
+		}
 		File logSubDir = new File(logDir, name + "_" + index);
 		if (!logSubDir.exists()) {
 			if (!logSubDir.mkdirs()) {
