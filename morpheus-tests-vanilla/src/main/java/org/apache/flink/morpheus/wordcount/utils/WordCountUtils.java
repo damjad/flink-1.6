@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiFunction;
 
 public class WordCountUtils {
@@ -159,6 +160,7 @@ public class WordCountUtils {
 		@Override
 		public void processElement(RecordWrapper<Tuple2<CustomString, Long>> value, Context ctx, Collector<RecordWrapper<Tuple2<CustomString, Long>>> out) throws Exception {
 
+			Thread.sleep(ThreadLocalRandom.current().nextInt(200,300));
 			WordCountWindowAccumulator old = temp.compute(value.getRecord().f0, new BiFunction<CustomString, WordCountWindowAccumulator, WordCountWindowAccumulator>() {
 				@Override
 				public WordCountWindowAccumulator apply(CustomString key, WordCountWindowAccumulator acc) {
