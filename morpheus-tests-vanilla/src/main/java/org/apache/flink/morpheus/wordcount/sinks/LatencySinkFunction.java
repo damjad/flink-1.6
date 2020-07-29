@@ -94,7 +94,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		}
 		else {
 			this.writer = new BufferedWriter(new FileWriter(logFile, false));
-			stringBuffer.append("subtask,vnodeId,ts,latencyCount,flightTimeCount,latencyMean,flightTimeMean,latencyMin,flightTimeMin,latencyMax,flightTimeMax");
+			stringBuffer.append("subtask,vnodeId,ts,latencyCount,flightTimeCount,latencyMean,flightTimeMean,latencyMin,flightTimeMin,latencyMax,flightTimeMax,latency,procLatency");
 			stringBuffer.append("\n");
 			writer.write(stringBuffer.toString());
 			writtenSoFar += stringBuffer.length() * 2;
@@ -133,7 +133,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 		sinkEventLatency.clear();
 	}
 
-	private void updateCSV(long timestamp, int vnodeId, long latency) throws IOException {
+	private void updateCSV(long timestamp, int vnodeId, long latency, long procLatency) throws IOException {
 		try {
 			stringBuffer.append(index);
 			stringBuffer.append(",");
@@ -170,6 +170,8 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			stringBuffer.append(sinkProcessingLatency.getMax());
 			stringBuffer.append(",");
 			stringBuffer.append(latency);
+			stringBuffer.append(",");
+			stringBuffer.append(procLatency);
 
 			stringBuffer.append("\n");
 
@@ -191,6 +193,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 	public void invoke(RecordWrapper<T> record, Context context) throws Exception {
 		long timeMillis = context.currentProcessingTime();
 		long latency = timeMillis - record.getEventTime();
+		long procLatenci = timeMillis - record.getIngestionTime();
 		if (latency <= LATENCY_THRESHOLD) {
 			sinkEventLatency.addValue(latency);
 			sinkProcessingLatency.addValue(timeMillis - record.getIngestionTime());
@@ -211,7 +214,7 @@ public class LatencySinkFunction<T> extends RichSinkFunction<RecordWrapper<T>> {
 			procLatency.setValue(((long) sinkProcessingLatency.getMean()));
 //				sinkLatencyWindow.addValue(timeMillis - record.windowTriggeringTimestamp);
 //			updateCSV(timeMillis, VNodeUtils.getVNode(record.getKey(), maxParallelism, numVNodes, parallelism));
-			updateCSV(timeMillis, -1, latency);
+			updateCSV(timeMillis, -1, latency, procLatenci);
 		}
 	}
 }

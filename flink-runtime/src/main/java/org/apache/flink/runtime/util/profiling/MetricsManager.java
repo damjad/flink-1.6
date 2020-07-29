@@ -140,10 +140,20 @@ public class MetricsManager implements Serializable {
 					+ recordsIn + ","
 					+ (latency.f2 == 0 ? "NaN" : div(latency.f0, latency.f2)) + ","
 					+ (latency.f3 == 0 ? "NaN" : div(latency.f1, latency.f3)) + ","
-					+ epoch;
+					+ epoch+ ","
+					+ System.currentTimeMillis();
 				List<String> rates = Arrays.asList(ratesLine);
 
 				Path ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + instanceId + "-" + epoch + ".log").toAbsolutePath();
+				try {
+					Files.write(ratesFile, rates, Charset.forName("UTF-8"), APPEND, CREATE);
+				} catch (IOException e) {
+					System.err.println("Error while writing rates file for epoch " + epoch
+						+ " on task " + taskId + ".");
+					e.printStackTrace();
+				}
+
+				ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + epoch + ".csv").toAbsolutePath();
 				try {
 					Files.write(ratesFile, rates, Charset.forName("UTF-8"), APPEND, CREATE);
 				} catch (IOException e) {
@@ -230,6 +240,7 @@ public class MetricsManager implements Serializable {
 					List<String> rates = Arrays.asList(ratesLine);
 
 					Path ratesFile = Paths.get(ratesPath + workerName.trim() + "-" + instanceId + "-" + epoch + ".log").toAbsolutePath();
+
 					try {
 						Files.write(ratesFile, rates, Charset.forName("UTF-8"));
 					} catch (IOException e) {

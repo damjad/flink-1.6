@@ -49,8 +49,9 @@ public class TBaseTest {
 		config.setInteger(WebOptions.PORT, 8081);
 
 
-//		config.setString(CheckpointingOptions.ROCKSDB_LOCAL_DIRECTORIES,
-//			System.getProperty("java.io.tmpdir") + "/r1," + System.getProperty("java.io.tmpdir") + "/r2");
+		config.setString("state.checkpoints.dir","file:///data/4/peel/vanilla/tmp");
+		config.setString("state.backend","rocksdb");
+		config.setString("state.backend.rocksdb.localdir", "/data/1/peel/flink/tmp,/data/3/peel/flink/tmp");
 
 //		if (!NativeIO.hasPosixFadvise()) {
 //			config.setString(ReplicationOptions.TASK_MANAGER_CHECKPOINT_READER, "zero-copy");
