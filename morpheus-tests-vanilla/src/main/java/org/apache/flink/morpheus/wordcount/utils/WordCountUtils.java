@@ -247,7 +247,7 @@ public class WordCountUtils {
 
 		@Override
 		public void flatMap(CustomString[] value, Collector<RecordWrapper<Tuple2<CustomString, Long>>> out) throws Exception {
-			Thread.sleep(ThreadLocalRandom.current().nextInt(200,300));
+			Thread.sleep(ThreadLocalRandom.current().nextInt(0,100));
 
 			Arrays.stream(value).forEach(x -> {
 				RecordWrapper<Tuple2<CustomString, Long>> r = new RecordWrapper<>(new Tuple2<>(x, 1L), System.currentTimeMillis());
