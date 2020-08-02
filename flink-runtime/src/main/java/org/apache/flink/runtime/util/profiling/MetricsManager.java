@@ -69,6 +69,7 @@ public class MetricsManager implements Serializable {
 
 	private LongContainerGauge observedProcRate;
 	private LongContainerGauge trueProcRate;
+	private LongContainerGauge waistedTime;
 
 
 	/**
@@ -127,6 +128,7 @@ public class MetricsManager implements Serializable {
 
 				observedProcRate.setValue((long) observedProcessingRate);
 				trueProcRate.setValue((long) trueProcessingRate);
+				waistedTime.setValue(waitingTime);
 
 				// log the rates: one file per epoch
 				String ratesLine = workerName + ","
@@ -267,12 +269,6 @@ public class MetricsManager implements Serializable {
 					latency.f2 += latencyMetricsFromSink.f2.getCount();
 					latency.f1 += latencyMetricsFromSink.f1.getValue();
 					latency.f3 += latencyMetricsFromSink.f3.getCount();
-
-					//Maybe set them in the latency sink.
-					latencyMetricsFromSink.f0.setValue(0);
-					latencyMetricsFromSink.f2.dec(latencyMetricsFromSink.f2.getCount());
-					latencyMetricsFromSink.f1.setValue(0);
-					latencyMetricsFromSink.f3.dec(latencyMetricsFromSink.f3.getCount());
 		}
 	}
 
@@ -300,9 +296,10 @@ public class MetricsManager implements Serializable {
 		return instanceId;
 	}
 
-	public void setProcRateMetricContainers(LongContainerGauge observedProcRate, LongContainerGauge trueProcRate) {
+	public void setProcRateMetricContainers(LongContainerGauge observedProcRate, LongContainerGauge trueProcRate, LongContainerGauge waistedTime) {
 		this.observedProcRate = observedProcRate;
 		this.trueProcRate = trueProcRate;
+		this.waistedTime = waistedTime;
 	}
 
 

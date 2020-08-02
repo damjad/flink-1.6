@@ -122,6 +122,7 @@ public class StreamInputProcessor<IN> {
 
 	private LongContainerGauge observedProcRate = new LongContainerGauge();
 	private LongContainerGauge trueProcRate = new LongContainerGauge();
+	private LongContainerGauge waistedTime = new LongContainerGauge();
 
 
 
@@ -174,7 +175,7 @@ public class StreamInputProcessor<IN> {
 		this.operatorChain = operatorChain;
 		metrics.gauge("observedProcRate", observedProcRate);
 		metrics.gauge("trueProcRate", trueProcRate);
-
+		metrics.gauge("waistedTime", waistedTime);
 
 	}
 
@@ -359,7 +360,7 @@ public class StreamInputProcessor<IN> {
 
 	public void setMetricsManager(MetricsManager metricsManager) {
 		this.metricsManager = metricsManager;
-		metricsManager.setProcRateMetricContainers(observedProcRate, trueProcRate);
+		metricsManager.setProcRateMetricContainers(observedProcRate, trueProcRate, waistedTime);
 	}
 
 
